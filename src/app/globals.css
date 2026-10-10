@@ -1,0 +1,184 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #effdfa;
+  --color-brand-100: #d6f7ee;
+  --color-brand-200: #aeece0;
+  --color-brand-300: #7ae0ce;
+  --color-brand-400: #4fc1a8;
+  --color-brand-500: #30a58c;
+  --color-brand-600: #238472;
+  --color-brand-700: #1f6a5d;
+  --color-brand-800: #1b554b;
+  --color-brand-900: #19463f;
+  --color-brand-950: #0b2925;
+}
+
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --ink: #0f172a;
+  --ink-soft: #64748b;
+  --line: #e2e8f0;
+  --brand: var(--color-brand-600);
+  --brand-ink: #ffffff;
+  --brand-soft: var(--color-brand-100);
+  --accent: #f59e0b;
+  --danger: #ef4444;
+  --danger-soft: #fee2e2;
+  
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  --shadow-glow: 0 0 20px rgba(48, 165, 140, 0.15);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1121;
+    --surface: #131b2f;
+    --surface-2: #1e293b;
+    --ink: #f8fafc;
+    --ink-soft: #94a3b8;
+    --line: #334155;
+    --brand: var(--color-brand-400);
+    --brand-ink: #020617;
+    --brand-soft: rgba(79, 193, 168, 0.15);
+    --accent: #fbbf24;
+    --danger: #f87171;
+    --danger-soft: rgba(248, 113, 113, 0.15);
+    
+    --glass-bg: rgba(19, 27, 47, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.05);
+    --shadow-glow: 0 0 20px rgba(79, 193, 168, 0.15);
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --animate-fade-up: fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-pulse-slow: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-float: float 6s ease-in-out infinite;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes pulse-slow {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+
+  @keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+    100% { transform: translateY(0px); }
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  overflow-x: hidden;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-brand text-brand-ink hover:-translate-y-0.5 hover:shadow-[var(--shadow-glow)] hover:brightness-110 active:translate-y-0;
+}
+@utility btn-secondary {
+  @apply btn border border-line bg-surface/50 backdrop-blur-sm text-ink hover:bg-surface-2 hover:-translate-y-0.5 active:translate-y-0;
+}
+@utility btn-danger {
+  @apply btn bg-danger text-white hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0;
+}
+@utility card {
+  @apply rounded-3xl border border-line bg-surface/80 backdrop-blur-md shadow-sm transition-all duration-300 hover:shadow-md hover:border-brand/30;
+}
+@utility glass-panel {
+  @apply rounded-3xl border shadow-lg backdrop-blur-xl transition-all duration-300;
+  background-color: var(--glass-bg);
+  border-color: var(--glass-border);
+}
+@utility input {
+  @apply w-full rounded-2xl border border-line bg-surface/50 backdrop-blur-sm px-4 py-3 text-sm text-ink outline-none transition-all placeholder:text-ink-soft focus:border-brand focus:ring-4 focus:ring-brand/10;
+}
+@utility label {
+  @apply mb-1.5 block text-sm font-semibold text-ink;
+}
+@utility chip {
+  @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-all;
+}
+@utility text-gradient {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-brand to-accent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Leaflet sits under the sticky header and dialogs. */
+.leaflet-container {
+  z-index: 0;
+  font: inherit;
+}
+
+/* Background blob effects */
+.bg-blob {
+  position: absolute;
+  filter: blur(100px);
+  z-index: -1;
+  opacity: 0.5;
+  border-radius: 50%;
+  animation: float 10s infinite alternate;
+}
+
+/* Leaflet Popup Premium Hover Styles */
+.hover-popup .leaflet-popup-content-wrapper {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 10px 40px -10px rgba(0,0,0,0.3), var(--shadow-glow);
+  border-radius: 1.5rem;
+  padding: 0;
+  transition: all 0.3s ease;
+}
+
+.hover-popup .leaflet-popup-tip {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid var(--glass-border);
+  border-left: 1px solid var(--glass-border);
+}
+
+.hover-popup .leaflet-popup-content {
+  margin: 0.75rem;
+}
