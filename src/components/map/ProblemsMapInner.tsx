@@ -2,9 +2,10 @@
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "@/i18n/client";
+import type { Dictionary } from "@/i18n/dictionaries";
 import { PATHS, STATUSES } from "@/lib/taxonomy";
 import type { LatLng } from "@/lib/geo";
 import type { ProblemCard } from "@/lib/types";
@@ -30,7 +31,47 @@ function pinIcon(color: string, done: boolean) {
   return icon;
 }
 
-export type Bounds = { minLat: number; minLng: number; maxLat: number; maxLng: number };
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string) {
+  const node = document.createElement(tag);
+  node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+// Built with DOM APIs, never innerHTML: titles and photo URLs come from residents.
+function tooltipFor(p: ProblemCard, photo: string | undefined, t: Dictionary) {
+  const root = el("div", "w-56 pb-1 cursor-pointer");
+  if (photo) {
+    const img = el("img", "mb-3 h-28 w-full rounded-xl object-cover shadow-sm");
+    img.src = photo;
+    img.alt = "";
+    root.append(img);
+  }
+  const badges = el("div", "flex flex-wrap gap-1 mb-2");
+  const status = el(
+    "span",
+    "inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+    t.taxonomy.statuses[p.status],
+  );
+  status.style.backgroundColor = `${STATUSES[p.status].color}20`;
+  status.style.color = STATUSES[p.status].color;
+  badges.append(
+    status,
+    el(
+      "span",
+      "inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-surface-2 text-ink-soft border border-line/50",
+      t.taxonomy.paths[p.path].short,
+    ),
+  );
+  root.append(
+    badges,
+    el("p", "my-1 text-sm font-bold leading-snug line-clamp-2 text-ink", p.title),
+    el("div", "mt-2 text-xs font-bold text-brand flex items-center gap-1", t.map.viewDetails),
+  );
+  return root;
+}
+
+export type Bounds ={ minLat: number; minLng: number; maxLat: number; maxLng: number };
 
 export default function ProblemsMapInner({
   problems,
@@ -49,6 +90,7 @@ export default function ProblemsMapInner({
   const [map, setMap] = useState<L.Map | null>(null);
   const markersRef = useRef<L.Marker[]>([]);
   const router = useRouter();
+  const { t } = useI18n();
 
   // Initialize map
   useEffect(() => {
@@ -114,32 +156,7 @@ export default function ProblemsMapInner({
         router.push(`/problems/${p.id}`);
       });
 
-      // Create tooltip HTML
-      const tooltipContent = document.createElement('div');
-      tooltipContent.className = 'w-56 pb-1 cursor-pointer';
-      
-      let html = '';
-      if (photo) {
-        html += `<img src="${photo}" alt="" class="mb-3 h-28 w-full rounded-xl object-cover shadow-sm" />`;
-      }
-      html += `
-        <div class="flex flex-wrap gap-1 mb-2">
-          <span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider" style="background-color: ${STATUSES[p.status].color}20; color: ${STATUSES[p.status].color}">
-            ${STATUSES[p.status].label}
-          </span>
-          <span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-surface-2 text-ink-soft border border-line/50">
-            ${PATHS[p.path].short}
-          </span>
-        </div>
-        <p class="my-1 text-sm font-bold leading-snug line-clamp-2 text-ink">${p.title}</p>
-        <div class="mt-2 text-xs font-bold text-brand flex items-center gap-1">
-          Click to view details &rarr;
-        </div>
-      `;
-      
-      tooltipContent.innerHTML = html;
-
-      marker.bindTooltip(tooltipContent, {
+      marker.bindTooltip(tooltipFor(p, photo, t), {
         direction: 'top',
         offset: [0, -15],
         opacity: 1,
@@ -148,7 +165,7 @@ export default function ProblemsMapInner({
 
       markersRef.current.push(marker);
     });
-  }, [problems, router]);
+  }, [problems, router, map, t]);
 
   return <div ref={mapContainerRef} className={className} />;
 }

@@ -1,0 +1,26 @@
+name: Uptime check
+
+# Free uptime monitoring: pings /api/health every 15 minutes. A failed run makes
+# GitHub email the repository owners (Settings > Notifications > Actions).
+#
+# Repository variable: SITE_URL, e.g. https://sambhal.in
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    if: ${{ vars.SITE_URL != '' }}
+    steps:
+      - name: Check /api/health
+        run: |
+          for attempt in 1 2 3; do
+            code=$(curl -s -o body.json -w '%{http_code}' --max-time 20 "${{ vars.SITE_URL }}/api/health" || true)
+            if [ "$code" = "200" ]; then cat body.json; exit 0; fi
+            echo "Attempt $attempt: HTTP $code"; sleep 20
+          done
+          echo "::error::Sambhal is down: ${{ vars.SITE_URL }}/api/health returned $code"
+          exit 1
