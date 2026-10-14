@@ -1,10 +1,14 @@
+"use client";
+
 import Link from "next/link";
-import { CheckCircle2, Users, MapPin, Clock } from "lucide-react";
+import { CheckCircle2, Clock, MapPin, Users } from "lucide-react";
+import { useI18n } from "@/i18n/client";
 import { timeAgo } from "@/lib/format";
 import type { ProblemCard as Card } from "@/lib/types";
-import { PathBadge, SeverityBadge, StatusBadge, categoryLabel } from "./Badges";
+import { CategoryLabel, PathBadge, SeverityBadge, StatusBadge } from "./Badges";
 
 export function ProblemCard({ problem }: { problem: Card }) {
+  const { locale } = useI18n();
   const photo = problem.photos[0];
   return (
     <Link
@@ -14,7 +18,7 @@ export function ProblemCard({ problem }: { problem: Card }) {
       <div className="absolute inset-0 bg-gradient-to-br from-brand/5 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
       <div className="relative z-10 flex flex-1 flex-col rounded-2xl bg-surface/60 p-4 backdrop-blur-sm dark:bg-surface/40">
         <div className="mb-4 flex items-start gap-4">
-          <div className="relative size-20 shrink-0 overflow-hidden rounded-2xl bg-surface-2 shadow-inner border border-line/50">
+          <div className="relative size-20 shrink-0 overflow-hidden rounded-2xl border border-line/50 bg-surface-2 shadow-inner">
             {photo ? (
               // eslint-disable-next-line @next/next/no-img-element -- user photos from Supabase Storage
               <img src={photo} alt="" className="size-full object-cover transition-transform duration-500 group-hover:scale-110" loading="lazy" />
@@ -32,24 +36,29 @@ export function ProblemCard({ problem }: { problem: Card }) {
             <SeverityBadge severity={problem.severity} />
           </div>
         </div>
-        
-        <h3 className="mb-2 line-clamp-2 text-lg font-bold leading-tight tracking-tight text-ink group-hover:text-brand transition-colors">
+
+        <h3 className="mb-2 line-clamp-2 text-lg leading-tight font-bold tracking-tight text-ink transition-colors group-hover:text-brand">
           {problem.title}
         </h3>
-        
-        <div className="mt-auto pt-4 border-t border-line/30 flex flex-wrap items-center justify-between gap-y-2 text-xs font-medium text-ink-soft">
+        {problem.locality && <p className="mb-1 truncate text-xs text-ink-soft">{problem.locality}</p>}
+
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-y-2 border-t border-line/30 pt-4 text-xs font-medium text-ink-soft">
           <div className="flex items-center gap-1.5">
-            <span className="truncate max-w-[120px]">{categoryLabel(problem.category)}</span>
+            <span className="max-w-[120px] truncate">
+              <CategoryLabel category={problem.category} />
+            </span>
             <span className="size-1 rounded-full bg-line" />
-            <span className="flex items-center gap-1"><Clock className="size-3" /> {timeAgo(problem.created_at)}</span>
+            <span className="flex items-center gap-1" suppressHydrationWarning>
+              <Clock className="size-3" /> {timeAgo(problem.created_at, locale)}
+            </span>
           </div>
-          
-          <div className="flex items-center gap-3 bg-surface-2/50 px-2.5 py-1 rounded-full border border-line/20">
-            <span className="flex items-center gap-1" title="Confirmations">
+
+          <div className="flex items-center gap-3 rounded-full border border-line/20 bg-surface-2/50 px-2.5 py-1">
+            <span className="flex items-center gap-1">
               <CheckCircle2 className="size-3.5 text-brand" /> {problem.confirm_count}
             </span>
             <span className="size-1 rounded-full bg-line" />
-            <span className="flex items-center gap-1" title="Supporters">
+            <span className="flex items-center gap-1">
               <Users className="size-3.5 text-accent" /> {problem.support_count}
             </span>
           </div>

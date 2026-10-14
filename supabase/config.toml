@@ -266,7 +266,9 @@ content_path = "./supabase/templates/sign-in.html"
 
 [auth.sms]
 # Allow/disallow new user signups via SMS to your project.
-enable_signup = false
+# Phone sign-in is opt-in in the app (NEXT_PUBLIC_PHONE_AUTH=true). In production it needs an
+# SMS provider below (Twilio, MessageBird, Textlocal or Vonage), which charges per message.
+enable_signup = true
 # If enabled, users need to confirm their phone number before signing in.
 enable_confirmations = false
 # Template for sending OTP to users
@@ -275,8 +277,10 @@ template = "Your code is {{ .Code }}"
 max_frequency = "5s"
 
 # Use pre-defined map of phone number to OTP for testing.
-# [auth.sms.test_otp]
-# 4152127777 = "123456"
+# Free local testing: sign in with +91 99000 00001 / 00002 and code 123456. No SMS is sent.
+[auth.sms.test_otp]
+919900000001 = "123456"
+919900000002 = "123456"
 
 # Configure logged in session timeouts.
 # [auth.sessions]

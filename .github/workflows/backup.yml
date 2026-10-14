@@ -1,0 +1,53 @@
+name: Nightly database backup
+
+# Free backups for Supabase's free tier (which has none): a nightly encrypted
+# pg_dump stored as a workflow artifact for 30 days.
+#
+# Repository secrets:
+#   SUPABASE_DB_URL     Project Settings > Database > Connection string (session pooler, URI)
+#   BACKUP_PASSPHRASE   long random string; you need it to decrypt (store it in your password manager)
+#
+# Restore: gpg --decrypt sambhal-*.sql.gz.gpg | gunzip | psql "$DATABASE_URL"
+
+on:
+  schedule:
+    - cron: "30 20 * * *" # 02:00 IST
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check configuration
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$DB" ] || [ -z "$PASS" ]; then
+            echo "::error::Set SUPABASE_DB_URL and BACKUP_PASSPHRASE repository secrets"
+            exit 1
+          fi
+      - name: Install PostgreSQL 17 client
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSo /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -q && sudo apt-get install -yq postgresql-client-17
+      - name: Dump, compress, encrypt
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -o pipefail
+          FILE="sambhal-$(date -u +%Y-%m-%dT%H%M).sql.gz.gpg"
+          /usr/lib/postgresql/17/bin/pg_dump "$DB" --no-owner --no-privileges --schema=public --schema=auth --schema=storage \
+            | gzip -9 \
+            | gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase "$PASS" -o "$FILE"
+          echo "FILE=$FILE" >> "$GITHUB_ENV"
+          ls -lh "$FILE"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.FILE }}
+          path: ${{ env.FILE }}
+          retention-days: 30
+          if-no-files-found: error
