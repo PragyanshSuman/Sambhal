@@ -38,6 +38,10 @@ begin
     values (gen_random_uuid(), u.id, u.id::text, jsonb_build_object('sub', u.id::text, 'email', u.email, 'email_verified', true), 'email', now(), now(), now());
   end loop;
 
+  -- Established accounts, so their on-the-spot votes count fully.
+  update public.profiles set created_at = now() - interval '90 days';
+  insert into public.moderators (user_id) values (asha);
+
   update public.profiles set area = 'Indiranagar', reputation = 12 where id = asha;
   update public.profiles set area = 'HAL 2nd Stage', reputation = 31 where id = ravi;
   update public.profiles set area = 'Indiranagar', reputation = 5 where id = meera;
@@ -45,8 +49,8 @@ begin
 
   insert into public.helpers (user_id, skills, radius_km, lat, lng, bio)
   values
-    (imran, '{electrician,general}', 5, 12.9690, 77.6400, 'Electrician, free most evenings'),
-    (ravi, '{plumber,carpenter}', 3, 12.9730, 77.6430, 'Retired plumber, happy to help');
+    (imran, '{general,first_aid}', 5, 12.9690, 77.6400, 'Trained first-aider, free most evenings'),
+    (ravi, '{labor,organizing}', 3, 12.9730, 77.6430, 'Retired, handy with tools, happy to rally people');
 
   insert into public.problems
     (id, reporter_id, title, description, category, severity, path, status, lat, lng, address,
@@ -77,7 +81,16 @@ begin
      'construction', 'medium', 'owner', 'reported', 12.97230, 77.64650, 'Opposite the pharmacy, 80 Feet Road',
      0, 2, null, null, null, now() - interval '2 days', now() - interval '2 days');
 
-  update public.problems set skills_needed = '{plumber}' where id = p_leak;
+  update public.problems set skills_needed = '{general}' where id = p_leak;
+  update public.problems set locality = 'Indiranagar', city = 'Bengaluru'
+  where id in (p_garbage, p_leak, p_pothole, p_bench);
+  update public.problems set locality = 'HAL 2nd Stage', city = 'Bengaluru' where id in (p_wire, p_debris);
+
+  insert into public.events (problem_id, organizer_id, starts_at, meeting_point, checklist, notes)
+  values (p_garbage, ravi, date_trunc('day', now()) + interval '3 days 8 hours', 'Bus stop, 12th Main',
+          '{Gloves,"Garbage bags",Broom,"Water bottle"}', 'Two hours, then chai on the corner.');
+  insert into public.event_rsvps (event_id, user_id)
+  select e.id, who from public.events e, unnest(array[ravi, meera, asha]) as who where e.problem_id = p_garbage;
   update public.problems set resolved_at = now() - interval '9 days', verified_at = now() - interval '8 days', fixed_count = 2
   where id = p_bench;
 

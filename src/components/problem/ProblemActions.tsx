@@ -1,11 +1,14 @@
 "use client";
 
-import { Camera, CheckCircle2, Hand, Heart, Loader2, MapPin, SearchX, Undo2, Wrench, X, XCircle } from "lucide-react";
+import { CheckCircle2, Hand, Heart, Loader2, MapPin, SearchX, Undo2, Wrench, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { currentPosition } from "@/lib/geo";
+import { PhotoInput } from "@/components/PhotoInput";
+import { useI18n } from "@/i18n/client";
+import { fmt } from "@/i18n/config";
+import { currentPosition, GeoError, geoMessage } from "@/lib/geo";
 import { createClient } from "@/lib/supabase/client";
-import { PATHS, PATH_KEYS, RULES, type ProblemPath } from "@/lib/taxonomy";
+import { isOpen, PATH_KEYS, RULES, type ProblemPath } from "@/lib/taxonomy";
 import type { Problem } from "@/lib/types";
 import { uploadPhoto } from "@/lib/upload";
 import { useAction } from "./useAction";
@@ -17,19 +20,21 @@ type Props = {
   myConfirmations: string[];
 };
 
-const OPEN = ["reported", "confirmed", "claimed", "reopened"];
+type OnSiteKind = "exists" | "not_exists" | "fixed" | "not_fixed";
 
 export function ProblemActions({ problem: p, userId, supported, myConfirmations }: Props) {
+  const { t } = useI18n();
   const supabase = useState(createClient)[0];
-  const { busy, error, run } = useAction();
+  const { busy, error, run, setError } = useAction();
+  const [spotPhoto, setSpotPhoto] = useState<Blob | null>(null);
 
   if (!userId) {
     return (
       <div className="card p-5">
-        <p className="font-semibold">Can you help with this?</p>
-        <p className="mt-1 text-sm text-ink-soft">Sign in to confirm it, support it, or take it on.</p>
+        <p className="font-semibold">{t.actions.canYouHelp}</p>
+        <p className="mt-1 text-sm text-ink-soft">{t.actions.signInToHelp}</p>
         <Link href={`/login?next=/problems/${p.id}`} className="btn-primary mt-4 w-full">
-          Sign in to help
+          {t.actions.signInButton}
         </Link>
       </div>
     );
@@ -37,11 +42,21 @@ export function ProblemActions({ problem: p, userId, supported, myConfirmations 
 
   const isOwner = p.owner_id === userId;
   const isReporter = p.reporter_id === userId;
-  const isOpen = OPEN.includes(p.status);
+  const open = isOpen(p.status);
 
-  async function onSite(kind: "exists" | "not_exists" | "fixed" | "not_fixed", photo?: File | null, note?: string) {
-    return run(kind, async () => {
-      const here = await currentPosition();
+  async function onSite(kind: OnSiteKind, photo?: Blob | null, note?: string) {
+    // "It's there" and "it's fixed" need proof taken now; the server checks the upload time.
+    if ((kind === "exists" || kind === "fixed") && !photo) {
+      setError(t.actions.confirmNeedsPhoto);
+      return false;
+    }
+    const ok = await run(kind, async () => {
+      let here;
+      try {
+        here = await currentPosition();
+      } catch (e) {
+        throw new Error(geoMessage(e instanceof GeoError ? e : null, t));
+      }
       const photoUrl = photo ? await uploadPhoto(supabase, userId!, photo) : null;
       const { error } = await supabase.rpc("confirm_problem", {
         p_problem: p.id,
@@ -53,6 +68,8 @@ export function ProblemActions({ problem: p, userId, supported, myConfirmations 
       });
       if (error) throw error;
     });
+    if (ok) setSpotPhoto(null);
+    return ok;
   }
 
   async function toggleSupport() {
@@ -67,20 +84,22 @@ export function ProblemActions({ problem: p, userId, supported, myConfirmations 
   return (
     <div className="space-y-4">
       {/* Confirm it's real */}
-      {isOpen && !isReporter && (
+      {open && !isReporter && (
         <div className="card p-5">
-          <p className="font-semibold">Are you at the spot?</p>
+          <p className="font-semibold">{t.actions.atTheSpot}</p>
           <p className="mt-1 text-sm text-ink-soft">
-            Confirmations only count from within {RULES.maxDistanceM} m. {p.status === "reported" && `${Math.max(0, RULES.confirmThreshold - p.confirm_count)} more needed.`}
+            {fmt(t.actions.onlyWithin, { n: RULES.maxDistanceM })}{" "}
+            {p.status === "reported" && fmt(t.actions.moreNeeded, { n: Math.max(0, RULES.confirmThreshold - p.confirm_count) })}
           </p>
+          <PhotoInput photo={spotPhoto} onChange={setSpotPhoto} label={t.photo.takeFresh} fresh />
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button
-              onClick={() => onSite("exists")}
+              onClick={() => onSite("exists", spotPhoto)}
               disabled={!!busy}
               className={myConfirmations.includes("exists") ? "btn-primary" : "btn-secondary"}
             >
               {busy === "exists" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-              I see it too
+              {t.actions.seeItToo}
             </button>
             <button
               onClick={() => onSite("not_exists")}
@@ -88,12 +107,10 @@ export function ProblemActions({ problem: p, userId, supported, myConfirmations 
               className={myConfirmations.includes("not_exists") ? "btn-primary" : "btn-secondary"}
             >
               {busy === "not_exists" ? <Loader2 className="size-4 animate-spin" /> : <SearchX className="size-4" />}
-              Can&apos;t find it
+              {t.actions.cantFind}
             </button>
           </div>
-          <div className="mt-2">
-            <OnSiteHint />
-          </div>
+          <OnSiteHint />
         </div>
       )}
 
@@ -101,29 +118,27 @@ export function ProblemActions({ problem: p, userId, supported, myConfirmations 
       {p.status === "resolved" && !isOwner && <VerifyFix busy={busy} onVerify={onSite} mine={myConfirmations} />}
       {p.status === "resolved" && isOwner && (
         <div className="card p-5 text-sm">
-          <p className="font-semibold">Waiting for peers to verify</p>
-          <p className="mt-1 text-ink-soft">
-            {p.fixed_count} of {RULES.verifyThreshold} verifications so far. Share the link with people nearby.
-          </p>
+          <p className="font-semibold">{t.actions.waitingVerify}</p>
+          <p className="mt-1 text-ink-soft">{fmt(t.actions.verificationsSoFar, { n: p.fixed_count, total: RULES.verifyThreshold })}</p>
         </div>
       )}
 
       {/* Support */}
-      {isOpen && (
+      {open && (
         <button onClick={toggleSupport} disabled={!!busy} className={`${supported ? "btn-primary" : "btn-secondary"} w-full`}>
           {busy === "support" ? <Loader2 className="size-4 animate-spin" /> : <Heart className={`size-4 ${supported ? "fill-current" : ""}`} />}
-          {supported ? "You support this" : "This affects me too"} · {p.support_count}
+          {supported ? t.actions.supported : t.actions.affectsMe} · {p.support_count}
         </button>
       )}
 
       {/* Ownership */}
-      {isOpen && !p.owner_id && <ClaimBox problem={p} busy={busy} run={run} />}
-      {isOpen && isOwner && <OwnerBox problem={p} userId={userId} busy={busy} run={run} />}
-      {isOpen && !isOwner && !p.owner_id && p.path !== "danger" && (
-        <ResolveBox problem={p} userId={userId} busy={busy} run={run} title="Already fixed it? Post the after photo" />
+      {open && !p.owner_id && <ClaimBox problem={p} busy={busy} run={run} />}
+      {open && isOwner && <OwnerBox problem={p} userId={userId} busy={busy} run={run} />}
+      {open && !isOwner && !p.owner_id && p.path !== "danger" && (
+        <ResolveBox problem={p} userId={userId} busy={busy} run={run} title={t.actions.alreadyFixed} />
       )}
 
-      {(isReporter || isOwner) && isOpen && <ChangePath problem={p} busy={busy} run={run} />}
+      {(isReporter || isOwner) && open && <ChangePath problem={p} busy={busy} run={run} />}
 
       {error && <p className="rounded-xl bg-danger-soft p-3 text-sm text-danger">{error}</p>}
     </div>
@@ -133,6 +148,7 @@ export function ProblemActions({ problem: p, userId, supported, myConfirmations 
 type Run = ReturnType<typeof useAction>["run"];
 
 function ClaimBox({ problem: p, busy, run }: { problem: Problem; busy: string | null; run: Run }) {
+  const { t } = useI18n();
   const supabase = useState(createClient)[0];
   const [days, setDays] = useState(7);
   const [note, setNote] = useState("");
@@ -140,24 +156,20 @@ function ClaimBox({ problem: p, busy, run }: { problem: Problem; busy: string | 
 
   return (
     <div className="card p-5">
-      <p className="font-semibold">{danger ? "Coordinate the response" : "Take ownership"}</p>
-      <p className="mt-1 text-sm text-ink-soft">
-        {danger
-          ? "You make sure emergency services are called and people are warned. You don't fix it yourself."
-          : "You don't have to do it alone. Owning it means you keep it moving and post updates. If you go quiet for a week, it opens up again."}
-      </p>
+      <p className="font-semibold">{danger ? t.actions.coordinate : t.actions.takeOwnership}</p>
+      <p className="mt-1 text-sm text-ink-soft">{danger ? t.actions.coordinateHelp : t.actions.ownershipHelp}</p>
       <textarea
         className="input mt-3 min-h-16"
         maxLength={300}
-        placeholder={danger ? "e.g. Called 112, putting up a warning sign" : "Your plan, e.g. Cleanup drive Sunday 8am, bring gloves"}
+        placeholder={danger ? t.actions.dangerPlanPlaceholder : t.actions.planPlaceholder}
         value={note}
         onChange={(e) => setNote(e.target.value)}
       />
       <div className="mt-3 flex gap-2">
-        <select className="input w-auto" value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="Deadline">
+        <select className="input w-auto" value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label={t.actions.deadline}>
           {[1, 3, 7, 14, 30].map((d) => (
             <option key={d} value={d}>
-              within {d} day{d > 1 ? "s" : ""}
+              {fmt(t.actions.withinDays, { n: d })}
             </option>
           ))}
         </select>
@@ -172,7 +184,7 @@ function ClaimBox({ problem: p, busy, run }: { problem: Problem; busy: string | 
           }
         >
           {busy === "claim" ? <Loader2 className="size-4 animate-spin" /> : <Hand className="size-4" />}
-          I&apos;ll take this on
+          {t.actions.takeItOn}
         </button>
       </div>
     </div>
@@ -180,10 +192,11 @@ function ClaimBox({ problem: p, busy, run }: { problem: Problem; busy: string | 
 }
 
 function OwnerBox({ problem: p, userId, busy, run }: { problem: Problem; userId: string; busy: string | null; run: Run }) {
+  const { t } = useI18n();
   const supabase = useState(createClient)[0];
   return (
     <div className="space-y-4">
-      <ResolveBox problem={p} userId={userId} busy={busy} run={run} title="Done? Post the after photo" />
+      <ResolveBox problem={p} userId={userId} busy={busy} run={run} title={t.actions.doneAfter} />
       <button
         className="btn-secondary w-full"
         disabled={!!busy}
@@ -195,7 +208,7 @@ function OwnerBox({ problem: p, userId, busy, run }: { problem: Problem; userId:
         }
       >
         {busy === "release" ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}
-        I can&apos;t do this anymore, let someone else take it
+        {t.actions.release}
       </button>
     </div>
   );
@@ -214,21 +227,20 @@ function ResolveBox({
   run: Run;
   title: string;
 }) {
+  const { t } = useI18n();
   const supabase = useState(createClient)[0];
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [photo, setPhoto] = useState<Blob | null>(null);
   const [note, setNote] = useState("");
 
   return (
     <div className="card p-5">
       <p className="font-semibold">{title}</p>
-      <p className="mt-1 text-sm text-ink-soft">
-        Take it from the same angle as the original. {RULES.verifyThreshold} peers then check it on the spot.
-      </p>
-      <PhotoInput file={photo} onChange={setPhoto} label="After photo (required)" />
+      <p className="mt-1 text-sm text-ink-soft">{fmt(t.actions.sameAngle, { n: RULES.verifyThreshold })}</p>
+      <PhotoInput photo={photo} onChange={setPhoto} label={t.actions.afterPhoto} />
       <textarea
         className="input mt-3 min-h-16"
         maxLength={500}
-        placeholder="What was done, and by whom? Thank the people who helped."
+        placeholder={t.actions.whatWasDone}
         value={note}
         onChange={(e) => setNote(e.target.value)}
       />
@@ -244,7 +256,7 @@ function ResolveBox({
         }
       >
         {busy === "resolve" ? <Loader2 className="size-4 animate-spin" /> : <Wrench className="size-4" />}
-        Mark as fixed
+        {t.actions.markFixed}
       </button>
     </div>
   );
@@ -256,25 +268,28 @@ function VerifyFix({
   mine,
 }: {
   busy: string | null;
-  onVerify: (kind: "fixed" | "not_fixed", photo?: File | null, note?: string) => Promise<boolean>;
+  onVerify: (kind: "fixed" | "not_fixed", photo?: Blob | null, note?: string) => Promise<boolean>;
   mine: string[];
 }) {
-  const [photo, setPhoto] = useState<File | null>(null);
+  const { t } = useI18n();
+  const [photo, setPhoto] = useState<Blob | null>(null);
   const [note, setNote] = useState("");
   return (
     <div className="card border-brand/50 p-5">
-      <p className="font-semibold">Is it really fixed? Check on the spot.</p>
-      <p className="mt-1 text-sm text-ink-soft">Your location is checked. A photo makes your verification stronger.</p>
-      <PhotoInput file={photo} onChange={setPhoto} label="Photo (optional)" />
-      <input className="input mt-3" maxLength={280} placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+      <p className="font-semibold">{t.actions.reallyFixed}</p>
+      <p className="mt-1 text-sm text-ink-soft">{t.actions.verifyHelp}</p>
+      <PhotoInput photo={photo} onChange={setPhoto} label={t.photo.takeFresh} fresh />
+      <input className="input mt-3" maxLength={280} placeholder={t.actions.note} value={note} onChange={(e) => setNote(e.target.value)} />
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button
           className={mine.includes("fixed") ? "btn-primary" : "btn-secondary"}
           disabled={!!busy}
-          onClick={() => onVerify("fixed", photo, note)}
+          onClick={async () => {
+            if (await onVerify("fixed", photo, note)) setPhoto(null);
+          }}
         >
           {busy === "fixed" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-          Yes, fixed
+          {t.actions.yesFixed}
         </button>
         <button
           className={mine.includes("not_fixed") ? "btn-danger" : "btn-secondary"}
@@ -282,14 +297,16 @@ function VerifyFix({
           onClick={() => onVerify("not_fixed", photo, note)}
         >
           {busy === "not_fixed" ? <Loader2 className="size-4 animate-spin" /> : <XCircle className="size-4" />}
-          Not fixed
+          {t.actions.notFixed}
         </button>
       </div>
+      <OnSiteHint />
     </div>
   );
 }
 
 function ChangePath({ problem: p, busy, run }: { problem: Problem; busy: string | null; run: Run }) {
+  const { t } = useI18n();
   const supabase = useState(createClient)[0];
   const [open, setOpen] = useState(false);
   const [path, setPath] = useState<ProblemPath>(p.path);
@@ -298,27 +315,25 @@ function ChangePath({ problem: p, busy, run }: { problem: Problem; busy: string 
   if (!open) {
     return (
       <button className="w-full text-sm text-ink-soft underline" onClick={() => setOpen(true)}>
-        Stuck? Try a different path
+        {t.actions.stuck}
       </button>
     );
   }
   return (
     <div className="card p-5">
-      <p className="font-semibold">Switch path</p>
+      <p className="font-semibold">{t.actions.switchPath}</p>
       <select className="input mt-3" value={path} onChange={(e) => setPath(e.target.value as ProblemPath)}>
         {PATH_KEYS.map((k) => (
-          <option key={k} value={k}>{PATHS[k].label}</option>
+          <option key={k} value={k}>
+            {t.taxonomy.paths[k].label}
+          </option>
         ))}
       </select>
-      <input
-        className="input mt-2"
-        maxLength={300}
-        placeholder="Why? e.g. Nobody has the right tools, so let's pool money for a plumber"
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-      />
+      <input className="input mt-2" maxLength={300} placeholder={t.actions.whySwitch} value={reason} onChange={(e) => setReason(e.target.value)} />
       <div className="mt-3 flex gap-2">
-        <button className="btn-secondary" onClick={() => setOpen(false)}>Cancel</button>
+        <button className="btn-secondary" onClick={() => setOpen(false)}>
+          {t.common.cancel}
+        </button>
         <button
           className="btn-primary flex-1"
           disabled={!!busy || path === p.path || !reason.trim()}
@@ -330,59 +345,18 @@ function ChangePath({ problem: p, busy, run }: { problem: Problem; busy: string 
             if (ok) setOpen(false);
           }}
         >
-          Switch path
+          {t.actions.switchPath}
         </button>
       </div>
     </div>
   );
 }
 
-export function PhotoInput({ file, onChange, label }: { file: File | null; onChange: (f: File | null) => void; label: string }) {
-  const [preview, setPreview] = useState<string | null>(null);
-  return (
-    <div className="mt-3">
-      {file && preview ? (
-        <div className="relative w-fit">
-          {/* eslint-disable-next-line @next/next/no-img-element -- local preview */}
-          <img src={preview} alt="" className="max-h-40 rounded-xl" />
-          <button
-            type="button"
-            onClick={() => {
-              URL.revokeObjectURL(preview);
-              setPreview(null);
-              onChange(null);
-            }}
-            className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-black/60 text-white"
-            aria-label="Remove photo"
-          >
-            <X className="size-3.5" />
-          </button>
-        </div>
-      ) : (
-        <label className="btn-secondary w-fit cursor-pointer">
-          <Camera className="size-4" /> {label}
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="sr-only"
-            onChange={(e) => {
-              const f = e.target.files?.[0] ?? null;
-              if (f) setPreview(URL.createObjectURL(f));
-              onChange(f);
-              e.target.value = "";
-            }}
-          />
-        </label>
-      )}
-    </div>
-  );
-}
-
 function OnSiteHint() {
+  const { t } = useI18n();
   return (
-    <p className="flex items-center gap-1 text-xs text-ink-soft">
-      <MapPin className="size-3" /> Uses your location once, only to check you&apos;re nearby.
+    <p className="mt-2 flex items-center gap-1 text-xs text-ink-soft">
+      <MapPin className="size-3" /> {t.actions.usesLocation}
     </p>
   );
 }
