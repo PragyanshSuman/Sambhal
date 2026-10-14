@@ -1,5 +1,6 @@
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
+import { safeNext } from "@/lib/redirect";
 import { createClient } from "@/lib/supabase/server";
 
 // Handles the link in the sign-in email (the 6-digit code on /login works too).
@@ -15,8 +16,4 @@ export async function GET(request: NextRequest) {
     if (!error) return NextResponse.redirect(new URL(next, request.url));
   }
   return NextResponse.redirect(new URL("/login?error=link", request.url));
-}
-
-function safeNext(next: string | null) {
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
 }
