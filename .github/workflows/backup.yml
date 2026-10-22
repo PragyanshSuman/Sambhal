@@ -45,7 +45,7 @@ jobs:
             | gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase "$PASS" -o "$FILE"
           echo "FILE=$FILE" >> "$GITHUB_ENV"
           ls -lh "$FILE"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: ${{ env.FILE }}
           path: ${{ env.FILE }}
